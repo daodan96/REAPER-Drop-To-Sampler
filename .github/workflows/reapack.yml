@@ -18,6 +18,7 @@ env:
   WIN_ASSET: reaper_drop_to_sampler-x64.dll
   MAC_ASSET: reaper_drop_to_sampler.dylib
   LINUX_ASSET: reaper_drop_to_sampler-x86_64.so
+  LINUX_ARM_ASSET: reaper_drop_to_sampler-aarch64.so
 
 jobs:
   index:
@@ -49,6 +50,9 @@ jobs:
           fi
           if grep -qx "$LINUX_ASSET" <<< "$assets"; then
             sources+=(--source linux64 "$LINUX_ASSET" "$url/$LINUX_ASSET")
+          fi
+          if grep -qx "$LINUX_ARM_ASSET" <<< "$assets"; then
+            sources+=(--source linux-aarch64 "$LINUX_ARM_ASSET" "$url/$LINUX_ARM_ASSET")
           fi
           if [ ${#sources[@]} -eq 0 ]; then
             echo "::error::Release $TAG has no plugin binaries"

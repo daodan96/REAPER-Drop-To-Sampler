@@ -54,6 +54,7 @@ jobs:
           cp artifacts/windows-x64/reaper_drop_to_sampler-x64.dll dist/
           cp artifacts/macos-universal/reaper_drop_to_sampler.dylib dist/
           cp artifacts/linux-x86_64/reaper_drop_to_sampler-x86_64.so dist/
+          cp artifacts/linux-aarch64/reaper_drop_to_sampler-aarch64.so dist/
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" dist/* --clobber
           else

@@ -4,7 +4,7 @@
     <description><![CDATA[{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\widowctrl\hyphauto
 {\pard \ql \f0 \sa180 \li0 \fi0 \b \fs36 Drop To Sampler\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 Drop media onto the track list (TCP) or the mixer (MCP) to insert a sampler (ReaSamplOmatic5000 or Cartridge) with the sample loaded, instead of inserting an item on the track.\par}
-{\pard \ql \f0 \sa180 \li0 \fi0 \b Windows (x64), macOS (Apple Silicon and Intel) and Linux (x86_64).\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \b Windows (x64), macOS (Apple Silicon and Intel) and Linux (x86_64 and aarch64).\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 After install, restart REAPER. Settings: Extensions > Drop To Sampler.\par}
 }]]></description>
     <link rel="website" href="https://github.com/daodan96/REAPER-Drop-To-Sampler">Source code</link>
@@ -17,7 +17,7 @@
 {\pard \ql \f0 \sa180 \li0 \fi0 \b \fs36 Drop To Sampler\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 Drop media onto the track list (TCP) or the mixer (MCP) to insert a sampler (ReaSamplOmatic5000 or Cartridge) with the sample loaded, instead of inserting an item on the track.\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 Shift: one track / multiple tracks. Ctrl: layers / chromatic. Alt: add / replace.\par}
-{\pard \ql \f0 \sa180 \li0 \fi0 \b Windows (x64), macOS (Apple Silicon and Intel) and Linux (x86_64).\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \b Windows (x64), macOS (Apple Silicon and Intel) and Linux (x86_64 and aarch64).\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 After install, restart REAPER. Settings: Extensions > Drop To Sampler.\par}
 }]]></description>
         <link rel="website" href="https://github.com/daodan96/REAPER-Drop-To-Sampler">Source code</link>

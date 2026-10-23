@@ -4,7 +4,7 @@
 
 Расширение для [REAPER](https://www.reaper.fm/): если перетащить медиафайл на **TCP / MCP**, вместо айтема на треке появится сэмплер (RS5k или [Cartridge](https://dsgdnb.com/plugins/cartridge)) с уже загруженным сэмплом.
 
-Windows (x64), macOS (Apple Silicon и Intel), Linux (x86_64).
+Windows (x64), macOS (Apple Silicon и Intel), Linux (x86_64 и aarch64).
 
 ## Установка
 
