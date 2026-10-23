@@ -23,6 +23,14 @@
         <link rel="website" href="https://github.com/daodan96/REAPER-Drop-To-Sampler">Source code</link>
         <link rel="website" href="https://forum.cockos.com/showthread.php?p=2968712">Forum thread</link>
       </metadata>
+      <version name="0.6.2" author="daodan96" time="2026-10-23T05:09:35Z">
+        <changelog><![CDATA[- linux-aarch64 support]]></changelog>
+        <source platform="win64" file="reaper_drop_to_sampler-x64.dll">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.2/reaper_drop_to_sampler-x64.dll</source>
+        <source platform="darwin-arm64" file="reaper_drop_to_sampler.dylib">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.2/reaper_drop_to_sampler.dylib</source>
+        <source platform="darwin64" file="reaper_drop_to_sampler.dylib">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.2/reaper_drop_to_sampler.dylib</source>
+        <source platform="linux64" file="reaper_drop_to_sampler-x86_64.so">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.2/reaper_drop_to_sampler-x86_64.so</source>
+        <source platform="linux-aarch64" file="reaper_drop_to_sampler-aarch64.so">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.2/reaper_drop_to_sampler-aarch64.so</source>
+      </version>
       <version name="0.6.1" author="daodan96" time="2026-10-21T08:34:39Z">
         <changelog><![CDATA[+Set track Monitoring ON when set to rec-arm (in case it's disabled by track defaults)]]></changelog>
         <source platform="win64" file="reaper_drop_to_sampler-x64.dll">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.1/reaper_drop_to_sampler-x64.dll</source>
