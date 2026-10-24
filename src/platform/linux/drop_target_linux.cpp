@@ -329,3 +329,16 @@ std::unique_ptr<DropTarget> DropTarget::Attach(HWND hwnd, DragHandler* handler)
     }
     return std::unique_ptr<DropTarget>(new SwellDropTarget(hwnd));
 }
+
+std::unique_ptr<DropTarget> DropTarget::AttachPassthrough(HWND hwnd, DragHandler* handler, InterceptFn shouldIntercept, bool allowParentWalk)
+{
+    // TODO: native passthrough for arrange. Not implemented yet.
+    (void)hwnd; (void)handler; (void)shouldIntercept; (void)allowParentWalk;
+    return nullptr;
+}
+
+std::unique_ptr<DropTarget> DropTarget::AttachClaim(HWND hwnd, DragHandler* handler, InterceptFn shouldIntercept)
+{
+    (void)hwnd; (void)handler; (void)shouldIntercept;
+    return nullptr;
+}

@@ -13,16 +13,15 @@
 // Shift toggles one track <-> multiple tracks (not with Always prompt)
 static int ToggledMultiFilesMode(int mode, const Modifiers& mods)
 {
-    if (!mods.shift) return mode;
+    if (!IsModifierDown(mods, g_settings.modPlacement)) return mode;
     if (mode == MultiFiles_OneTrack) return MultiFiles_MultiTracks;
     if (mode == MultiFiles_MultiTracks) return MultiFiles_OneTrack;
     return mode;
 }
 
-// Ctrl toggles Layers <-> Chromatic (not with Always prompt)
 static int ToggledMultiSamplersMode(int mode, const Modifiers& mods)
 {
-    if (!mods.ctrl) return mode;
+    if (!IsModifierDown(mods, g_settings.modLayers)) return mode;
     if (mode == MultiSamplers_Layers) return MultiSamplers_Chromatic;
     if (mode == MultiSamplers_Chromatic) return MultiSamplers_Layers;
     return mode;
@@ -63,7 +62,7 @@ DropVisualKind UpdateDropHelp(const Modifiers& mods, int screenX, int screenY, i
         existingMode = Existing_Add;
     else if (s.existingMode == Existing_ReplaceOnSlot)
         existingMode = Existing_ReplaceOnSlot;
-    else if (mods.alt)
+    else if (IsModifierDown(mods, s.modReplace))
         existingMode = (s.existingMode == Existing_Add) ? Existing_Replace : Existing_Add;
 
     int multiSamplersMode = ToggledMultiSamplersMode(s.multiSamplersMode, mods);
@@ -75,24 +74,47 @@ DropVisualKind UpdateDropHelp(const Modifiers& mods, int screenX, int screenY, i
     if (GetThingFromPoint)
         track = GetThingFromPoint(screenX, screenY, info, sizeof(info));
 
-    bool overFxSlot = (strstr(info, "tcp.fxlist") != nullptr || strstr(info, "mcp.fxlist") != nullptr);
+    bool overFxSlot = (strstr(info, "tcp.fxlist") != nullptr || strstr(info, "mcp.fxlist") != nullptr
+        || strstr(info, "arrange.fxlist") != nullptr);
     bool slotHasFx = overFxSlot && (strstr(info, "fx:") != nullptr);
-    bool onTrackPanel = (strstr(info, "tcp") == info || strstr(info, "mcp") == info);
+    // arrange: same drop semantics as TCP/MCP when Drop to arrange is enabled
+    bool onTrackPanel = (strstr(info, "tcp") == info || strstr(info, "mcp") == info
+        || strstr(info, "arrange") == info);
 
     auto layerLabel = [&]() -> const char* {
         if (multiSamplersMode == MultiSamplers_AlwaysPrompt)
             return "Ask: Layers/Chromatic";
+        const char* key = ModifierKeyName(s.modLayers);
+        const bool down = IsModifierDown(mods, s.modLayers);
         if (multiSamplersMode == MultiSamplers_Chromatic)
-            return mods.ctrl ? "Chromatic" : "Chromatic (" DTS_KEY_CTRL " toggles)";
-        return mods.ctrl ? "Layers" : "Layers (" DTS_KEY_CTRL " toggles)";
+        {
+            if (!key || down) return "Chromatic";
+            static char buf[64];
+            snprintf(buf, sizeof(buf), "Chromatic (%s toggles)", key);
+            return buf;
+        }
+        if (!key || down) return "Layers";
+        static char buf2[64];
+        snprintf(buf2, sizeof(buf2), "Layers (%s toggles)", key);
+        return buf2;
     };
 
     auto placeLabel = [&]() -> const char* {
         if (multiFilesMode == MultiFiles_AlwaysPrompt)
             return "Ask: one / multiple tracks";
+        const char* key = ModifierKeyName(s.modPlacement);
+        const bool down = IsModifierDown(mods, s.modPlacement);
         if (multiFilesMode == MultiFiles_MultiTracks)
-            return mods.shift ? "On multiple tracks" : "On multiple tracks (" DTS_KEY_SHIFT " toggles)";
-        return mods.shift ? "On one track" : "On one track (" DTS_KEY_SHIFT " toggles)";
+        {
+            if (!key || down) return "On multiple tracks";
+            static char buf[64];
+            snprintf(buf, sizeof(buf), "On multiple tracks (%s toggles)", key);
+            return buf;
+        }
+        if (!key || down) return "On one track";
+        static char buf2[64];
+        snprintf(buf2, sizeof(buf2), "On one track (%s toggles)", key);
+        return buf2;
     };
 
     // --- Replace on FX slot ---
@@ -121,7 +143,7 @@ DropVisualKind UpdateDropHelp(const Modifiers& mods, int screenX, int screenY, i
         if (cnt == 1)
         {
             // "(Alt toggles)" only when key not held and base mode is Replace or Add (toggle available)
-            if (!mods.alt && s.existingMode != Existing_ReplaceOnSlot)
+            if (!IsModifierDown(mods, s.modReplace) && s.existingMode != Existing_ReplaceOnSlot)
                 SetDropHelp("Replace media (" DTS_KEY_ALT " toggles)");
             else
                 SetDropHelp("Replace media");
@@ -189,10 +211,10 @@ void ProcessDrop(const std::vector<std::string>& files, int screenX, int screenY
     else if (nFiles > 1)
     {
         multiFilesMode = ToggledMultiFilesMode(multiFilesMode, mods);
-        if (mods.shift)
+        if (IsModifierDown(mods, g_settings.modPlacement))
             DebugLog(multiFilesMode == MultiFiles_MultiTracks
-                ? "[Drop To Sampler] " DTS_KEY_SHIFT ": multiple tracks\n"
-                : "[Drop To Sampler] " DTS_KEY_SHIFT ": one track\n");
+                ? "[Drop To Sampler] placement mod: multiple tracks\n"
+                : "[Drop To Sampler] placement mod: one track\n");
     }
 
     int resolvedSampler = g_settings.samplerMode;
@@ -212,12 +234,12 @@ void ProcessDrop(const std::vector<std::string>& files, int screenX, int screenY
     // Replace-on-slot: Alt ignored (slot -> replace, else add).
     // Add/Replace: Alt toggles Add <-> Replace.
     int existingMode = g_settings.existingMode;
-    if (mods.alt && existingMode != Existing_ReplaceOnSlot)
+    if (IsModifierDown(mods, g_settings.modReplace) && existingMode != Existing_ReplaceOnSlot)
     {
         existingMode = (existingMode == Existing_Add) ? Existing_Replace : Existing_Add;
         DebugLog(existingMode == Existing_Add
-            ? "[Drop To Sampler] " DTS_KEY_ALT ": Add\n"
-            : "[Drop To Sampler] " DTS_KEY_ALT ": Replace\n");
+            ? "[Drop To Sampler] replace mod: Add\n"
+            : "[Drop To Sampler] replace mod: Replace\n");
     }
 
     // Single file that will REPLACE -> no Layers/Chromatic prompt
@@ -239,10 +261,10 @@ void ProcessDrop(const std::vector<std::string>& files, int screenX, int screenY
     }
 
     int multiSamplersMode = ToggledMultiSamplersMode(g_settings.multiSamplersMode, mods);
-    if (mods.ctrl && multiSamplersMode != MultiSamplers_AlwaysPrompt)
+    if (IsModifierDown(mods, g_settings.modLayers) && multiSamplersMode != MultiSamplers_AlwaysPrompt)
         DebugLog(multiSamplersMode == MultiSamplers_Chromatic
-            ? "[Drop To Sampler] " DTS_KEY_CTRL ": Chromatic\n"
-            : "[Drop To Sampler] " DTS_KEY_CTRL ": Layers\n");
+            ? "[Drop To Sampler] layers mod: Chromatic\n"
+            : "[Drop To Sampler] layers mod: Layers\n");
 
     // Multi-track layout only applies when dropping several files; a single file can still use Chromatic
     const bool multiTracks = (multiFilesMode == MultiFiles_MultiTracks && nFiles > 1);

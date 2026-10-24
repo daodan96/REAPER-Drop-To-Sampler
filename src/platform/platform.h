@@ -1,18 +1,11 @@
 #pragma once
 
-// Everything that differs between Windows, macOS and Linux lives behind this header.
-// Implementations: platform/win/*.cpp (OLE, GDI+), platform/mac/*.mm (Cocoa),
-// platform/linux/*.cpp (SWELL window subclassing), platform/posix/ (shared files).
-// The rest of the plugin uses only the REAPER API and the Win32 subset that
-// REAPER provides on macOS and Linux through SWELL.
-
 #include "reaper_plugin.h"
 
 #include <memory>
 #include <string>
 #include <vector>
 
-// Modifier key names as REAPER shows them (Cmd plays the role of Ctrl on macOS)
 #ifdef __APPLE__
 #define DTS_KEY_CTRL "Cmd"
 #define DTS_KEY_ALT "Option"
@@ -29,8 +22,6 @@ struct Modifiers
     bool alt = false;
 };
 
-// Receives file drags from a DropTarget. Points are in screen coordinates,
-// as expected by GetThingFromPoint; paths are UTF-8.
 class DragHandler
 {
 public:
@@ -41,18 +32,27 @@ public:
     virtual void OnDrop(const std::vector<std::string>& files, int x, int y, const Modifiers& mods) = 0;
 };
 
-// Takes over file drops on one REAPER window (TCP or MCP), replacing REAPER's
-// own handling, and forwards them to a DragHandler. Destroying it detaches.
 class DropTarget
 {
 public:
     virtual ~DropTarget() = default;
+
+    // Full replace (no native forward). Prefer AttachClaim / AttachPassthrough when Alt matters.
     static std::unique_ptr<DropTarget> Attach(HWND hwnd, DragHandler* handler);
+
+    // Wrap existing OLE on hwnd (or parents if allowParentWalk). Used for arrange.
+    using InterceptFn = bool (*)(const Modifiers& mods, int screenX, int screenY);
+    static std::unique_ptr<DropTarget> AttachPassthrough(
+        HWND hwnd, DragHandler* handler, InterceptFn shouldIntercept, bool allowParentWalk = false);
+
+    // Register on hwnd even if it has no OLE (TCP/MCP). Forward non-intercepted
+    // drops to the nearest parent OLE target (REAPER's real handler).
+    static std::unique_ptr<DropTarget> AttachClaim(
+        HWND hwnd, DragHandler* handler, InterceptFn shouldIntercept);
 };
 
 enum DropVisualKind { DropVisual_Insert = 0, DropVisual_Replace = 1 };
 
-// Icon shown next to the cursor while dragging over TCP/MCP
 class DragOverlay
 {
 public:
@@ -64,10 +64,7 @@ public:
 
 namespace platform {
 
-// Folder where Cartridge picks up pending_load.txt (UTF-8, no trailing separator)
 std::string CartridgeDataDir();
-
-// UTF-8 paths on every platform
 bool FileExists(const char* path);
 bool WriteTextFile(const char* path, const char* text);
 
