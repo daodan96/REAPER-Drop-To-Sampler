@@ -4,7 +4,7 @@
 
 An extension for [REAPER](https://www.reaper.fm/): dropping media onto the **TCP / MCP** inserts a sampler (RS5k or [Cartridge](https://dsgdnb.com/plugins/cartridge)) with the sample loaded, instead of inserting an item on the track.
 
-Windows (x64), macOS (Apple Silicon and Intel), Linux (x86_64).
+Windows (x64), macOS (Apple Silicon and Intel), Linux (x86_64 and aarch64).
 
 ## Install
 

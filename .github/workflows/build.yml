@@ -7,6 +7,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
   workflow_call:
     inputs:
       version:
@@ -56,8 +57,15 @@ jobs:
           if-no-files-found: error
 
   linux:
-    # Oldest supported runner: the .so then loads on distros with glibc >= 2.35
-    runs-on: ubuntu-22.04
+    # Oldest supported runners: the .so then loads on distros with glibc >= 2.35
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,12 +76,12 @@ jobs:
 
       - name: Check exports
         run: |
-          so=build/linux/reaper_drop_to_sampler-x86_64.so
+          so=build/linux/reaper_drop_to_sampler-${{ matrix.arch }}.so
           file "$so"
           nm -D --defined-only "$so" | grep -w ReaperPluginEntry
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-x86_64
-          path: build/linux/reaper_drop_to_sampler-x86_64.so
+          name: linux-${{ matrix.arch }}
+          path: build/linux/reaper_drop_to_sampler-${{ matrix.arch }}.so
           if-no-files-found: error

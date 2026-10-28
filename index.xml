@@ -4,7 +4,7 @@
     <description><![CDATA[{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0 \fswiss Helvetica;}}\widowctrl\hyphauto
 {\pard \ql \f0 \sa180 \li0 \fi0 \b \fs36 Drop To Sampler\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 Drop media onto the track list (TCP) or the mixer (MCP) to insert a sampler (ReaSamplOmatic5000 or Cartridge) with the sample loaded, instead of inserting an item on the track.\par}
-{\pard \ql \f0 \sa180 \li0 \fi0 \b Windows (x64), macOS (Apple Silicon and Intel) and Linux (x86_64).\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \b Windows (x64), macOS (Apple Silicon and Intel) and Linux (x86_64 and aarch64).\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 After install, restart REAPER. Settings: Extensions > Drop To Sampler.\par}
 }]]></description>
     <link rel="website" href="https://github.com/daodan96/REAPER-Drop-To-Sampler">Source code</link>
@@ -17,12 +17,27 @@
 {\pard \ql \f0 \sa180 \li0 \fi0 \b \fs36 Drop To Sampler\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 Drop media onto the track list (TCP) or the mixer (MCP) to insert a sampler (ReaSamplOmatic5000 or Cartridge) with the sample loaded, instead of inserting an item on the track.\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 Shift: one track / multiple tracks. Ctrl: layers / chromatic. Alt: add / replace.\par}
-{\pard \ql \f0 \sa180 \li0 \fi0 \b Windows (x64), macOS (Apple Silicon and Intel) and Linux (x86_64).\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \b Windows (x64), macOS (Apple Silicon and Intel) and Linux (x86_64 and aarch64).\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 After install, restart REAPER. Settings: Extensions > Drop To Sampler.\par}
 }]]></description>
         <link rel="website" href="https://github.com/daodan96/REAPER-Drop-To-Sampler">Source code</link>
         <link rel="website" href="https://forum.cockos.com/showthread.php?p=2968712">Forum thread</link>
       </metadata>
+      <version name="0.6.2" author="daodan96" time="2026-10-23T05:09:35Z">
+        <changelog><![CDATA[- linux-aarch64 support]]></changelog>
+        <source platform="win64" file="reaper_drop_to_sampler-x64.dll">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.2/reaper_drop_to_sampler-x64.dll</source>
+        <source platform="darwin-arm64" file="reaper_drop_to_sampler.dylib">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.2/reaper_drop_to_sampler.dylib</source>
+        <source platform="darwin64" file="reaper_drop_to_sampler.dylib">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.2/reaper_drop_to_sampler.dylib</source>
+        <source platform="linux64" file="reaper_drop_to_sampler-x86_64.so">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.2/reaper_drop_to_sampler-x86_64.so</source>
+        <source platform="linux-aarch64" file="reaper_drop_to_sampler-aarch64.so">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.2/reaper_drop_to_sampler-aarch64.so</source>
+      </version>
+      <version name="0.6.1" author="daodan96" time="2026-10-21T08:34:39Z">
+        <changelog><![CDATA[+Set track Monitoring ON when set to rec-arm (in case it's disabled by track defaults)]]></changelog>
+        <source platform="win64" file="reaper_drop_to_sampler-x64.dll">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.1/reaper_drop_to_sampler-x64.dll</source>
+        <source platform="darwin-arm64" file="reaper_drop_to_sampler.dylib">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.1/reaper_drop_to_sampler.dylib</source>
+        <source platform="darwin64" file="reaper_drop_to_sampler.dylib">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.1/reaper_drop_to_sampler.dylib</source>
+        <source platform="linux64" file="reaper_drop_to_sampler-x86_64.so">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.1/reaper_drop_to_sampler-x86_64.so</source>
+      </version>
       <version name="0.6.0" author="daodan96" time="2026-10-20T16:15:05Z">
         <changelog><![CDATA[- MacOS & Linux support]]></changelog>
         <source platform="win64" file="reaper_drop_to_sampler-x64.dll">https://github.com/daodan96/REAPER-Drop-To-Sampler/releases/download/v0.6.0/reaper_drop_to_sampler-x64.dll</source>
