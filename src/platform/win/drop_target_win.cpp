@@ -195,6 +195,36 @@ static IDropTarget* WindowOleDropTarget(HWND hwnd)
     return reinterpret_cast<IDropTarget*>(GetPropW(hwnd, L"OleDropTargetInterface"));
 }
 
+// Real REAPER drop target captured before we wrap it (arrange passthrough).
+// Floating MCP must forward here — NOT to our own proxy on the main window
+// (that re-enters OLE and freezes the drag).
+static IDropTarget* g_savedReaperNative = nullptr;
+
+static void RememberReaperNative(IDropTarget* native)
+{
+    if (!native || g_savedReaperNative)
+        return;
+    g_savedReaperNative = native;
+    g_savedReaperNative->AddRef();
+}
+
+static IDropTarget* ForwardNativeForClaim()
+{
+    return g_savedReaperNative;
+}
+
+namespace platform {
+void ReleaseSavedReaperNative()
+{
+    if (g_savedReaperNative)
+    {
+        g_savedReaperNative->Release();
+        g_savedReaperNative = nullptr;
+    }
+}
+} // namespace platform
+
+
 static int CountDroppedFiles(IDataObject* pDataObj)
 {
     return (int)DroppedFiles(pDataObj).size();
@@ -414,6 +444,8 @@ std::unique_ptr<DropTarget> DropTarget::AttachPassthrough(
     if (!native)
         return nullptr;
 
+    RememberReaperNative(native);
+
     OlePassthroughTarget* proxy = new OlePassthroughTarget(handler, native, shouldIntercept);
     if (FAILED(RevokeDragDrop(oleHwnd)))
     {
@@ -631,7 +663,7 @@ private:
 };
 
 std::unique_ptr<DropTarget> DropTarget::AttachClaim(
-    HWND hwnd, DragHandler* handler, InterceptFn shouldIntercept)
+    HWND hwnd, DragHandler* handler, InterceptFn shouldIntercept, HWND oleFallback)
 {
     if (!hwnd || !handler || !shouldIntercept) return nullptr;
     if (!g_oleInited)
@@ -640,7 +672,6 @@ std::unique_ptr<DropTarget> DropTarget::AttachClaim(
         g_oleInited = true;
     }
 
-    // Prefer existing OLE on this hwnd; else parent (main) — REAPER's real handler
     HWND oleHwnd = nullptr;
     IDropTarget* forward = WindowOleDropTarget(hwnd);
     if (forward)
@@ -648,16 +679,30 @@ std::unique_ptr<DropTarget> DropTarget::AttachClaim(
     else
         forward = FindParentOleTarget(hwnd, &oleHwnd);
 
-    if (!forward)
-        return nullptr;
+    // Prefer the original REAPER native captured before we wrapped main.
+    // Never forward into our own arrange proxy — that deadlocks OLE drags.
+    if (IDropTarget* saved = ForwardNativeForClaim())
+        forward = saved;
+    else if (!forward && oleFallback && oleFallback != hwnd)
+    {
+        forward = WindowOleDropTarget(oleFallback);
+        if (!forward)
+            forward = FindParentOleTarget(oleFallback, &oleHwnd);
+        if (forward)
+            RememberReaperNative(forward);
+    }
 
     OleClaimTarget* target = new OleClaimTarget(handler, forward, shouldIntercept);
 
-    // Register on the *claim* hwnd (TCP/MCP), not on the parent
     if (WindowOleDropTarget(hwnd))
         RevokeDragDrop(hwnd);
 
     HRESULT hr = RegisterDragDrop(hwnd, target);
+    if (hr == DRAGDROP_E_ALREADYREGISTERED)
+    {
+        RevokeDragDrop(hwnd);
+        hr = RegisterDragDrop(hwnd, target);
+    }
     if (FAILED(hr))
     {
         target->Release();
@@ -665,3 +710,4 @@ std::unique_ptr<DropTarget> DropTarget::AttachClaim(
     }
     return std::unique_ptr<DropTarget>(new OleClaimRegistration(hwnd, target));
 }
+

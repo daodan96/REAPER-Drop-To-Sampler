@@ -47,8 +47,10 @@ public:
 
     // Register on hwnd even if it has no OLE (TCP/MCP). Forward non-intercepted
     // drops to the nearest parent OLE target (REAPER's real handler).
+    // oleFallback: HWND that may own REAPER's OLE (usually main). Used when hwnd is a
+    // floating mixer dialog with no OLE in its parent chain.
     static std::unique_ptr<DropTarget> AttachClaim(
-        HWND hwnd, DragHandler* handler, InterceptFn shouldIntercept);
+        HWND hwnd, DragHandler* handler, InterceptFn shouldIntercept, HWND oleFallback = nullptr);
 };
 
 enum DropVisualKind { DropVisual_Insert = 0, DropVisual_Replace = 1 };
@@ -67,5 +69,8 @@ namespace platform {
 std::string CartridgeDataDir();
 bool FileExists(const char* path);
 bool WriteTextFile(const char* path, const char* text);
+
+// Windows: drop ref on captured REAPER IDropTarget. No-op elsewhere.
+void ReleaseSavedReaperNative();
 
 } // namespace platform

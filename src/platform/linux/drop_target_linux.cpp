@@ -333,12 +333,16 @@ std::unique_ptr<DropTarget> DropTarget::Attach(HWND hwnd, DragHandler* handler)
 std::unique_ptr<DropTarget> DropTarget::AttachPassthrough(HWND hwnd, DragHandler* handler, InterceptFn shouldIntercept, bool allowParentWalk)
 {
     // TODO: native passthrough for arrange. Not implemented yet.
-    (void)hwnd; (void)handler; (void)shouldIntercept; (void)allowParentWalk;
+    (void)hwnd; (void)handler; (void)shouldIntercept; (void)oleFallback; (void)allowParentWalk;
     return nullptr;
 }
 
-std::unique_ptr<DropTarget> DropTarget::AttachClaim(HWND hwnd, DragHandler* handler, InterceptFn shouldIntercept)
+std::unique_ptr<DropTarget> DropTarget::AttachClaim(HWND hwnd, DragHandler* handler, InterceptFn shouldIntercept, HWND oleFallback)
 {
-    (void)hwnd; (void)handler; (void)shouldIntercept;
+    (void)hwnd; (void)handler; (void)shouldIntercept; (void)oleFallback;
     return nullptr;
+}
+
+namespace platform {
+void ReleaseSavedReaperNative() {}
 }
