@@ -30,11 +30,21 @@ public:
     void OnDragEnter(int fileCount, int x, int y, const Modifiers& mods) override
     {
         m_fileCount = fileCount;
+        if (m_fileCount <= 0)
+        {
+            if (m_overlay) m_overlay->Hide();
+            return;
+        }
         OnDragOver(x, y, mods);
     }
 
     void OnDragOver(int x, int y, const Modifiers& mods) override
     {
+        if (m_fileCount <= 0)
+        {
+            if (m_overlay) m_overlay->Hide();
+            return;
+        }
         DropVisualKind kind = UpdateDropHelp(mods, x, y, m_fileCount);
         if (m_overlay) m_overlay->ShowAtCursor(kind);
     }

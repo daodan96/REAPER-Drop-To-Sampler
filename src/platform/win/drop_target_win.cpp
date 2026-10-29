@@ -2,6 +2,7 @@
 
 #include "platform/platform.h"
 #include "settings.h"
+#include "reaper_plugin_functions.h"
 
 #include <ole2.h>
 #include <shellapi.h>
@@ -57,6 +58,27 @@ static Modifiers ModifiersFromKeyState(DWORD grfKeyState)
     return m;
 }
 
+static bool PathIsMediaFile(const char* path)
+{
+    if (!path || !path[0] || !IsMediaExtension)
+        return false;
+    const char* base = path;
+    for (const char* p = path; *p; ++p)
+    {
+        if (*p == '/' || *p == '\\')
+            base = p + 1;
+    }
+    const char* dot = nullptr;
+    for (const char* p = base; *p; ++p)
+    {
+        if (*p == '.')
+            dot = p;
+    }
+    if (!dot || !dot[1])
+        return false;
+    return IsMediaExtension(dot + 1, false);
+}
+
 static std::vector<std::string> DroppedFiles(IDataObject* pDataObj)
 {
     std::vector<std::string> files;
@@ -78,7 +100,8 @@ static std::vector<std::string> DroppedFiles(IDataObject* pDataObj)
             if (len && DragQueryFileW(hDrop, i, &path[0], len + 1))
             {
                 std::string utf8 = WideToUtf8(path.c_str());
-                if (!utf8.empty())
+                // Only REAPER media — non-media stays for native (fileCount 0 => not ours)
+                if (!utf8.empty() && PathIsMediaFile(utf8.c_str()))
                     files.push_back(utf8);
             }
         }
@@ -87,6 +110,7 @@ static std::vector<std::string> DroppedFiles(IDataObject* pDataObj)
     ReleaseStgMedium(&stg);
     return files;
 }
+
 
 class OleDropTarget : public IDropTarget
 {

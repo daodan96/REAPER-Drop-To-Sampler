@@ -9,6 +9,8 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
+#include <vector>
 
 // Shift toggles one track <-> multiple tracks (not with Always prompt)
 static int ToggledMultiFilesMode(int mode, const Modifiers& mods)
@@ -181,13 +183,57 @@ DropVisualKind UpdateDropHelp(const Modifiers& mods, int screenX, int screenY, i
     return DropVisual_Insert;
 }
 
+
+// Keep only paths REAPER treats as media (same idea as Media Explorer).
+static bool PathIsMediaFile(const char* path)
+{
+    if (!path || !path[0] || !IsMediaExtension)
+        return false;
+
+    const char* base = path;
+    for (const char* p = path; *p; ++p)
+    {
+        if (*p == '/' || *p == '\\')
+            base = p + 1;
+    }
+    const char* dot = nullptr;
+    for (const char* p = base; *p; ++p)
+    {
+        if (*p == '.')
+            dot = p;
+    }
+    if (!dot || !dot[1])
+        return false;
+
+    return IsMediaExtension(dot + 1, false);
+}
+
+static std::vector<std::string> FilterMediaFiles(const std::vector<std::string>& files)
+{
+    std::vector<std::string> out;
+    out.reserve(files.size());
+    for (const std::string& f : files)
+    {
+        if (PathIsMediaFile(f.c_str()))
+            out.push_back(f);
+        else
+            DebugLog("[Drop To Sampler] skip non-media: %s\n", f.c_str());
+    }
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // Drop
 // ---------------------------------------------------------------------------
 void ProcessDrop(const std::vector<std::string>& files, int screenX, int screenY, const Modifiers& mods)
 {
-    const int nFiles = (int)files.size();
-    if (nFiles == 0) return;
+    const std::vector<std::string> media = FilterMediaFiles(files);
+    const int nFiles = (int)media.size();
+    if (nFiles == 0)
+    {
+                DebugLog("[Drop To Sampler] no media files in drop, ignored\n");
+        return;
+    }
 
     bool createdNew = false;
     MediaTrack* track = ResolveTrackAtPoint(screenX, screenY, &createdNew);
@@ -350,8 +396,8 @@ void ProcessDrop(const std::vector<std::string>& files, int screenX, int screenY
             if (!tr) continue;
             ApplyRecArmForNewTrack(tr);
             lastNewTrack = tr;
-            AddSamplerWithFile(tr, files[i].c_str(), opt);
-            MaybeNameTrackAfterSample(tr, files[i].c_str(), false, false);
+            AddSamplerWithFile(tr, media[i].c_str(), opt);
+            MaybeNameTrackAfterSample(tr, media[i].c_str(), false, false);
         }
     }
     else
@@ -366,12 +412,12 @@ void ProcessDrop(const std::vector<std::string>& files, int screenX, int screenY
         for (int i = 0; i < nFiles; ++i)
         {
             opt.isLastOnTrack = (i + 1 == nFiles);
-            AddSamplerWithFile(track, files[i].c_str(), opt);
+            AddSamplerWithFile(track, media[i].c_str(), opt);
         }
         // Multiple samples stacked on one track -> do not auto-name.
         // Single sample + empty name + no sampler before -> name from file.
         if (nFiles == 1)
-            MaybeNameTrackAfterSample(track, files[0].c_str(), existingOnTrack >= 1, false);
+            MaybeNameTrackAfterSample(track, media[0].c_str(), existingOnTrack >= 1, false);
     }
 
     if (lastNewTrack)
