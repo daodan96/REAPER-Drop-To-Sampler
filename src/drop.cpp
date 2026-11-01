@@ -144,9 +144,14 @@ DropVisualKind UpdateDropHelp(const Modifiers& mods, int screenX, int screenY, i
         FindSamplerFx(track, samplerType, &cnt);
         if (cnt == 1)
         {
-            // "(Alt toggles)" only when key not held and base mode is Replace or Add (toggle available)
-            if (!IsModifierDown(mods, s.modReplace) && s.existingMode != Existing_ReplaceOnSlot)
-                SetDropHelp("Replace media (" DTS_KEY_ALT " toggles)");
+            // "(<key> toggles)" only when a key is assigned, not held, and base mode is Replace or Add
+            const char* key = ModifierKeyName(s.modReplace);
+            if (key && !IsModifierDown(mods, s.modReplace) && s.existingMode != Existing_ReplaceOnSlot)
+            {
+                char buf[64];
+                snprintf(buf, sizeof(buf), "Replace media (%s toggles)", key);
+                SetDropHelp(buf);
+            }
             else
                 SetDropHelp("Replace media");
             return DropVisual_Replace;
@@ -185,7 +190,7 @@ DropVisualKind UpdateDropHelp(const Modifiers& mods, int screenX, int screenY, i
 
 
 // Keep only paths REAPER treats as media (same idea as Media Explorer).
-static bool PathIsMediaFile(const char* path)
+bool PathIsMediaFile(const char* path)
 {
     if (!path || !path[0] || !IsMediaExtension)
         return false;
@@ -231,7 +236,7 @@ void ProcessDrop(const std::vector<std::string>& files, int screenX, int screenY
     const int nFiles = (int)media.size();
     if (nFiles == 0)
     {
-                DebugLog("[Drop To Sampler] no media files in drop, ignored\n");
+        DebugLog("[Drop To Sampler] no media files in drop, ignored\n");
         return;
     }
 

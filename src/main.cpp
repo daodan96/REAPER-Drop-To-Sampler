@@ -129,7 +129,9 @@ static HWND FindArrangeWindow()
 // IMPORTANT: never EnumWindows the whole desktop every timer tick, and never match
 // window titles like "Mixer" (breaks with localization and burns CPU when closed).
 
+#ifdef _WIN32
 static DWORD g_reaperPid = 0;
+#endif
 static int g_mcpEmptyBackoff = 0; // timer periods to skip full floating scan
 
 static bool IsMcpClass(HWND hwnd)
@@ -160,11 +162,14 @@ static void CollectMcpWindows(HWND hwnd, McpSearch& search)
 
 static BOOL CALLBACK CollectMcpTopLevel(HWND hwnd, LPARAM lParam)
 {
-    // Only windows belonging to this REAPER process (not every app on the desktop)
+#ifdef _WIN32
+    // Only windows belonging to this REAPER process (not every app on the desktop).
+    // SWELL's EnumWindows lists only this process's windows already.
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
     if (!g_reaperPid || pid != g_reaperPid)
         return TRUE;
+#endif
     CollectMcpWindows(hwnd, *(McpSearch*)lParam);
     return TRUE;
 }
@@ -176,11 +181,17 @@ static std::vector<HWND> FindMcpWindows(bool scanFloating)
     HWND main = GetMainHwnd ? GetMainHwnd() : nullptr;
     if (main)
     {
+#ifdef _WIN32
         if (!g_reaperPid)
             GetWindowThreadProcessId(main, &g_reaperPid);
+#endif
         CollectMcpWindows(main, search);
     }
+#ifdef _WIN32
     if (scanFloating && g_reaperPid)
+#else
+    if (scanFloating)
+#endif
         EnumWindows(CollectMcpTopLevel, (LPARAM)&search);
     return search.displays;
 }
