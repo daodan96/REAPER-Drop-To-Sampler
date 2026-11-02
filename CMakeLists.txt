@@ -13,8 +13,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Static MSVC runtime so clean PCs do not need VCRUNTIME140.dll
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-# Plugin version: release CI passes the git tag without "v" (-DDTS_VERSION=0.1.0)
-set(DTS_VERSION "0.0.0-dev" CACHE STRING "Plugin version (x.y.z)")
+# Plugin version: release CI passes the git tag without "v" (-DDTS_VERSION=0.6.3)
+set(DTS_VERSION "0.6.3" CACHE STRING "Plugin version (x.y.z)")
 if(NOT DTS_VERSION MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)(-[0-9A-Za-z.-]+)?$")
     message(FATAL_ERROR "DTS_VERSION must look like x.y.z or x.y.z-suffix, got '${DTS_VERSION}'")
 endif()

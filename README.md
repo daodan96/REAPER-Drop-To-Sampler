@@ -20,17 +20,20 @@ If you installed the plugin by hand before, delete the old `reaper_drop_to_sampl
 
 ## Usage
 
-Drag files from the Media Explorer (or Explorer / Finder / a file manager) onto the track list or the mixer. The status line under the TCP shows the current mode.
+Drag files from the Media Explorer (or Explorer / Finder / a file manager) onto the track list or mixer to insert a sampler. In the Arrange view, hold the configured modifier (Alt by default) to insert a sampler; otherwise, REAPER handles the drop normally. To replace a sample, drop onto a sampler FX slot when **Replace on sampler FX slot** is selected in Settings.
 
+The status line beneath the TCP shows the current mode while dragging.[^linux-file-count]
+
+Default modifiers (can be changed in Settings):
 * **Shift** — one track / multiple tracks
 * **Ctrl** (**Cmd** on macOS) — Layers / Chromatic
-* **Alt** (**Option** on macOS) — Add / Replace (not available in “on FX slot” mode)
-
-On Linux the file count is unknown until the drop, so the status line always describes a single file while dragging.
-
-`sampler_insert.png` / `sampler_replace.png` placed in `UserPlugins` override the embedded icons.
+* **Alt** (**Option** on macOS) — bypass sampler handling on TCP/MCP; enable it in Arrange
 
 **Settings:** *Extensions → Drop To Sampler* or *Preferences → Plug-ins → Drop To Sampler*.
+
+`sampler_insert.png` / `sampler_replace.png` in `UserPlugins` override the embedded icons. The active icon appears near the cursor while the extension handles the drag.
+
+[^linux-file-count]: On Linux, the file count is unknown until the drop, so the status line describes a single file while dragging, even when multiple files are selected.
 
 ## Discussion
 
