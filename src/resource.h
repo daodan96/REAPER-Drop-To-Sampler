@@ -3,7 +3,6 @@
 #define IDR_PNG_INSERT   201
 #define IDR_PNG_REPLACE  202
 
-// Preferences page (Preferences > Plug-ins > Drop To Sampler)
 #define IDD_PREFS            300
 
 #define IDC_DEBUG_CHECK      1001
@@ -20,3 +19,16 @@
 #define IDC_LABEL_MULTISAMP  1015
 #define IDC_MULTISAMP_COMBO  1016
 #define IDC_VERSION_LABEL    1018
+#define IDC_LABEL_ARRANGE    1019
+#define IDC_ARRANGE_COMBO    1020
+#define IDC_LABEL_TCP        1021
+#define IDC_TCP_COMBO        1022
+
+#define IDC_LABEL_MOD_REPLACE   1030
+#define IDC_MOD_REPLACE_COMBO   1031
+#define IDC_LABEL_MOD_PLACE     1032
+#define IDC_MOD_PLACE_COMBO     1033
+#define IDC_LABEL_MOD_LAYERS    1034
+#define IDC_MOD_LAYERS_COMBO    1035
+#define IDC_LABEL_MOD_SURFACE   1036
+#define IDC_MOD_SURFACE_COMBO   1037

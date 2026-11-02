@@ -8,8 +8,13 @@
 // libSwell's data by setting ours and looking for the word that changed. The old
 // value is REAPER's handler: ours call it first, then report hover over TCP/MCP.
 // File count is unknown while hovering (SWELL passes at most one path).
+//
+// "Native" is REAPER's own window procedure: AttachClaim() / AttachPassthrough() pass
+// WM_DROPFILES on to it whenever InterceptFn says the drop is not ours. REAPER's hover
+// handler always runs, so only our overlay follows InterceptFn.
 
 #include "platform/platform.h"
+#include "drop.h"
 #include "settings.h"
 
 #include <dlfcn.h>
@@ -29,6 +34,7 @@ struct Hook
 {
     WNDPROC prevProc = nullptr;
     DragHandler* handler = nullptr;
+    DropTarget::InterceptFn intercept = nullptr; // null: every media drop is ours
 };
 static std::map<HWND, Hook> g_hooks;
 
@@ -41,6 +47,27 @@ static Modifiers CurrentModifiers()
     return m;
 }
 
+// The key that picks sampler vs item is not also a drop modifier (as on Windows)
+static Modifiers HandlerModifiers(const Hook& hook)
+{
+    Modifiers m = CurrentModifiers();
+    if (!hook.intercept) return m;
+    switch (g_settings.modSurface)
+    {
+    case ModKey_Shift: m.shift = false; break;
+    case ModKey_Ctrl:  m.ctrl = false; break;
+    case ModKey_Alt:   m.alt = false; break;
+    default: break;
+    }
+    return m;
+}
+
+static bool WantsOurs(const Hook& hook, int x, int y)
+{
+    if (!hook.handler) return false;
+    return !hook.intercept || hook.intercept(CurrentModifiers(), x, y);
+}
+
 static std::vector<std::string> DroppedFiles(HDROP hDrop)
 {
     std::vector<std::string> files;
@@ -48,14 +75,15 @@ static std::vector<std::string> DroppedFiles(HDROP hDrop)
     for (UINT i = 0; i < count; ++i)
     {
         char path[4096] = {};
-        if (DragQueryFile(hDrop, i, path, sizeof(path)) && path[0])
+        // Only REAPER media: anything else stays with REAPER
+        if (DragQueryFile(hDrop, i, path, sizeof(path)) && PathIsMediaFile(path))
             files.push_back(path);
     }
     return files;
 }
 
 // false = not ours, let REAPER handle it
-static bool HandleDropFiles(HWND hwnd, HDROP hDrop, DragHandler* handler)
+static bool HandleDropFiles(HWND hwnd, HDROP hDrop, const Hook& hook)
 {
     std::vector<std::string> files = DroppedFiles(hDrop);
     if (files.empty()) return false;
@@ -63,7 +91,8 @@ static bool HandleDropFiles(HWND hwnd, HDROP hDrop, DragHandler* handler)
     POINT pt = {};
     DragQueryPoint(hDrop, &pt);
     ClientToScreen(hwnd, &pt);
-    handler->OnDrop(files, pt.x, pt.y, CurrentModifiers());
+    if (!WantsOurs(hook, pt.x, pt.y)) return false;
+    hook.handler->OnDrop(files, pt.x, pt.y, HandlerModifiers(hook));
     return true;
 }
 
@@ -93,8 +122,8 @@ static SwellHook g_swellHooks[] = {
 };
 static bool g_swellHooksInstalled = false;
 
-static HWND g_hoverHwnd = nullptr; // attached window the drag is over
-static int g_hoverFileCount = 0;
+static HWND g_hoverHwnd = nullptr; // attached window whose handler shows the drag
+static int g_hoverFileCount = 0;   // media files; -1 = unknown (external drag)
 
 // Attached window that contains the screen point, if any
 static HWND AttachedWindowAt(POINT pt)
@@ -114,6 +143,16 @@ static DragHandler* HandlerOf(HWND hwnd)
     return it != g_hooks.end() ? it->second.handler : nullptr;
 }
 
+// Attached window that takes the drag at pt (InterceptFn agrees), if any
+static HWND OurWindowAt(POINT pt)
+{
+    if (g_hoverFileCount == 0) return nullptr; // only non-media files
+    HWND hwnd = AttachedWindowAt(pt);
+    auto it = g_hooks.find(hwnd);
+    if (it == g_hooks.end() || !WantsOurs(it->second, pt.x, pt.y)) return nullptr;
+    return hwnd;
+}
+
 static void HoverLeave()
 {
     if (DragHandler* handler = HandlerOf(g_hoverHwnd))
@@ -123,19 +162,22 @@ static void HoverLeave()
 
 static void HoverAt(POINT pt)
 {
-    HWND hwnd = AttachedWindowAt(pt);
+    HWND hwnd = OurWindowAt(pt);
+    auto it = g_hooks.find(hwnd);
     if (hwnd != g_hoverHwnd)
     {
         HoverLeave();
-        if (DragHandler* handler = HandlerOf(hwnd))
+        if (it != g_hooks.end())
         {
             g_hoverHwnd = hwnd;
-            handler->OnDragEnter(g_hoverFileCount, pt.x, pt.y, CurrentModifiers());
+            // Unknown count: show as one file (the handler ignores a drag of 0)
+            int count = g_hoverFileCount < 0 ? 1 : g_hoverFileCount;
+            it->second.handler->OnDragEnter(count, pt.x, pt.y, HandlerModifiers(it->second));
         }
         return;
     }
-    if (DragHandler* handler = HandlerOf(hwnd))
-        handler->OnDragOver(pt.x, pt.y, CurrentModifiers());
+    if (it != g_hooks.end())
+        it->second.handler->OnDragOver(pt.x, pt.y, HandlerModifiers(it->second));
 }
 
 static void HookDragEnter(void* hGlobal, POINT pt)
@@ -143,10 +185,10 @@ static void HookDragEnter(void* hGlobal, POINT pt)
     if (g_swellHooks[0].prev) ((DragEnterProc)g_swellHooks[0].prev)(hGlobal, pt);
 
     // An external drag has no path yet: SWELL passes a placeholder under /tmp
-    g_hoverFileCount = 0;
+    g_hoverFileCount = -1;
     char path[4096] = {};
     if (hGlobal && DragQueryFile((HDROP)hGlobal, 0, path, sizeof(path)) && !strstr(path, "<<<<<"))
-        g_hoverFileCount = (int)DragQueryFile((HDROP)hGlobal, 0xFFFFFFFF, nullptr, 0);
+        g_hoverFileCount = (int)DroppedFiles((HDROP)hGlobal).size();
     HoverAt(pt);
 }
 
@@ -269,7 +311,7 @@ static LRESULT WINAPI HookWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
     if (it == g_hooks.end()) return DefWindowProc(hwnd, msg, wParam, lParam);
     Hook hook = it->second; // the handler may detach while handling
 
-    if (msg == WM_DROPFILES && hook.handler && HandleDropFiles(hwnd, (HDROP)wParam, hook.handler))
+    if (msg == WM_DROPFILES && hook.handler && HandleDropFiles(hwnd, (HDROP)wParam, hook))
         return 0;
     if (msg == WM_DESTROY)
     {
@@ -312,7 +354,8 @@ private:
     HWND m_hwnd;
 };
 
-std::unique_ptr<DropTarget> DropTarget::Attach(HWND hwnd, DragHandler* handler)
+static std::unique_ptr<DropTarget> AttachWithIntercept(HWND hwnd, DragHandler* handler,
+    DropTarget::InterceptFn intercept)
 {
     if (!hwnd || !handler) return nullptr;
     auto it = g_hooks.find(hwnd);
@@ -320,12 +363,40 @@ std::unique_ptr<DropTarget> DropTarget::Attach(HWND hwnd, DragHandler* handler)
     {
         if (it->second.handler) return nullptr; // already attached
         it->second.handler = handler; // reuse a pass-through hook
+        it->second.intercept = intercept;
     }
     else
     {
         Hook& hook = g_hooks[hwnd];
         hook.handler = handler;
+        hook.intercept = intercept;
         hook.prevProc = (WNDPROC)SetWindowLong(hwnd, GWL_WNDPROC, (LONG_PTR)HookWndProc);
     }
     return std::unique_ptr<DropTarget>(new SwellDropTarget(hwnd));
+}
+
+std::unique_ptr<DropTarget> DropTarget::Attach(HWND hwnd, DragHandler* handler)
+{
+    return AttachWithIntercept(hwnd, handler, nullptr);
+}
+
+// WM_DROPFILES goes to the deepest window under the cursor, so the arrange view is
+// subclassed itself (no parent walk as on Windows)
+std::unique_ptr<DropTarget> DropTarget::AttachPassthrough(HWND hwnd, DragHandler* handler, InterceptFn shouldIntercept, bool allowParentWalk)
+{
+    (void)allowParentWalk;
+    if (!shouldIntercept) return nullptr;
+    return AttachWithIntercept(hwnd, handler, shouldIntercept);
+}
+
+// Not ours: REAPER's window procedure gets WM_DROPFILES, as before we subclassed
+std::unique_ptr<DropTarget> DropTarget::AttachClaim(HWND hwnd, DragHandler* handler, InterceptFn shouldIntercept, HWND oleFallback)
+{
+    (void)oleFallback;
+    if (!shouldIntercept) return nullptr;
+    return AttachWithIntercept(hwnd, handler, shouldIntercept);
+}
+
+namespace platform {
+void ReleaseSavedReaperNative() {}
 }

@@ -18,8 +18,13 @@ static const char* kExtKeyShow = "show_sampler";
 static const char* kExtKeyMulti = "multi_files";
 static const char* kExtKeyMultiSamplers = "multi_samplers";
 static const char* kExtKeyExisting = "existing_sampler";
+static const char* kExtKeyArrange = "arrange_drop";
+static const char* kExtKeyTcp = "tcp_drop";
+static const char* kExtKeyModSurface = "mod_surface";
+static const char* kExtKeyModPlacement = "mod_placement";
+static const char* kExtKeyModLayers = "mod_layers";
+static const char* kExtKeyModReplace = "mod_replace";
 
-// Reads an int setting; keeps the default when missing or out of [lo, hi]
 static void LoadInt(const char* key, int lo, int hi, int* value)
 {
     const char* v = GetExtState(kExtSection, key);
@@ -34,6 +39,21 @@ static void SaveInt(const char* key, int value)
     char buf[32];
     snprintf(buf, sizeof(buf), "%d", value);
     SetExtState(kExtSection, key, buf, true);
+}
+
+void AssignModifierUnique(int* slots[], int count, int slotIndex, int key)
+{
+    if (slotIndex < 0 || slotIndex >= count) return;
+    if (key != ModKey_None)
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            if (i != slotIndex && slots[i] && *slots[i] == key)
+                *slots[i] = ModKey_None;
+        }
+    }
+    if (slots[slotIndex])
+        *slots[slotIndex] = key;
 }
 
 void LoadSettings()
@@ -53,6 +73,36 @@ void LoadSettings()
     LoadInt(kExtKeyMulti, MultiFiles_OneTrack, MultiFiles_AlwaysPrompt, &g_settings.multiFilesMode);
     LoadInt(kExtKeyMultiSamplers, MultiSamplers_Layers, MultiSamplers_AlwaysPrompt, &g_settings.multiSamplersMode);
     LoadInt(kExtKeyExisting, Existing_Add, Existing_ReplaceOnSlot, &g_settings.existingMode);
+
+    {
+        const char* av = GetExtState(kExtSection, kExtKeyArrange);
+        const char* tv = GetExtState(kExtSection, kExtKeyTcp);
+        if (av && av[0])
+        {
+            int m = atoi(av);
+            if (!tv || !tv[0])
+            {
+                g_settings.arrangeDropMode = (m == 0)
+                    ? SurfaceDrop_SamplerWithModifier
+                    : SurfaceDrop_Disabled;
+            }
+            else if (m >= SurfaceDrop_Disabled && m <= SurfaceDrop_NativeWithModifier)
+            {
+                g_settings.arrangeDropMode = m;
+            }
+        }
+        if (tv && tv[0])
+        {
+            int m = atoi(tv);
+            if (m >= SurfaceDrop_Disabled && m <= SurfaceDrop_NativeWithModifier)
+                g_settings.tcpDropMode = m;
+        }
+    }
+
+    LoadInt(kExtKeyModSurface, ModKey_None, ModKey_Alt, &g_settings.modSurface);
+    LoadInt(kExtKeyModPlacement, ModKey_None, ModKey_Alt, &g_settings.modPlacement);
+    LoadInt(kExtKeyModLayers, ModKey_None, ModKey_Alt, &g_settings.modLayers);
+    LoadInt(kExtKeyModReplace, ModKey_None, ModKey_Alt, &g_settings.modReplace);
 }
 
 void SaveSettings()
@@ -65,6 +115,12 @@ void SaveSettings()
     SaveInt(kExtKeyMulti, g_settings.multiFilesMode);
     SaveInt(kExtKeyMultiSamplers, g_settings.multiSamplersMode);
     SaveInt(kExtKeyExisting, g_settings.existingMode);
+    SaveInt(kExtKeyArrange, g_settings.arrangeDropMode);
+    SaveInt(kExtKeyTcp, g_settings.tcpDropMode);
+    SaveInt(kExtKeyModSurface, g_settings.modSurface);
+    SaveInt(kExtKeyModPlacement, g_settings.modPlacement);
+    SaveInt(kExtKeyModLayers, g_settings.modLayers);
+    SaveInt(kExtKeyModReplace, g_settings.modReplace);
 }
 
 void DebugLog(const char* fmt, ...)

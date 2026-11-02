@@ -38,13 +38,31 @@ static const char* HintForControlId(int id)
         return "Show floating FX window after insert. Default follows REAPER preferences.";
     case IDC_EXISTING_COMBO:
     case IDC_LABEL_EXISTING:
-        return "Add or Replace (" DTS_KEY_ALT " toggles) sample when a sampler is already on the track. Replace ignored when multiple media dragged.";
+        return "Add or Replace sample when a sampler is already on the track. Replace ignored when multiple media dragged. Optional modifier toggles Add/Replace.";
+    case IDC_MOD_REPLACE_COMBO:
+    case IDC_LABEL_MOD_REPLACE:
+        return "Modifier that toggles Add/Replace while dragging. Not set: only the setting above applies. Replace on FX slot ignores this modifier.";
     case IDC_MULTI_COMBO:
     case IDC_LABEL_MULTI:
-        return "Where to place multiple dropped media. Hold " DTS_KEY_SHIFT " to toggle this behavior.";
+        return "Where to place multiple dropped media. Optional modifier toggles one track / multiple tracks.";
+    case IDC_MOD_PLACE_COMBO:
+    case IDC_LABEL_MOD_PLACE:
+        return "Modifier that toggles one track vs multiple tracks for multi-file drops.";
     case IDC_MULTISAMP_COMBO:
     case IDC_LABEL_MULTISAMP:
-        return "Layers: default note range. Chromatic: one note per sample starting from C4 (including existing samplers). " DTS_KEY_CTRL " to toggle.";
+        return "Layers: default note range. Chromatic: one note per sample starting from C4 (including existing samplers).";
+    case IDC_MOD_LAYERS_COMBO:
+    case IDC_LABEL_MOD_LAYERS:
+        return "Modifier that toggles Layers vs Chromatic.";
+    case IDC_ARRANGE_COMBO:
+    case IDC_LABEL_ARRANGE:
+        return "Arrange drops. Disabled: no intercept. Insert sampler with modifier: modifier -> sampler, else item. Insert item with modifier: modifier -> item, else sampler.";
+    case IDC_TCP_COMBO:
+    case IDC_LABEL_TCP:
+        return "TCP/MCP drops. Disabled: no intercept. Insert sampler with modifier: modifier -> sampler, else item. Insert item with modifier: modifier -> item, else sampler.";
+    case IDC_MOD_SURFACE_COMBO:
+    case IDC_LABEL_MOD_SURFACE:
+        return "Shared modifier for Arrange and TCP/MCP insert sampler vs insert item modes.";
     case IDC_DEBUG_CHECK:
         return "Log drop details to the REAPER console.";
     default:
@@ -90,27 +108,51 @@ struct ComboSetting
 {
     int id;
     int* value;
-    const char* items[3];
+    const char* items[4]; // null-terminated list
 };
 
 static ComboSetting* ComboSettings()
 {
     static ComboSetting combos[] = {
         { IDC_SAMPLER_COMBO, &g_settings.samplerMode,
-            { "ReaSamplOmatic5000 (Cockos)", "Cartridge (DsgDnB)", "Always prompt" } },
+            { "ReaSamplOmatic5000 (Cockos)", "Cartridge (DsgDnB)", "Always prompt", nullptr } },
         { IDC_RECARM_COMBO, &g_settings.recArmMode,
-            { "Default", "Rec-arm", "Auto rec-arm" } },
+            { "Default", "Rec-arm", "Auto rec-arm", nullptr } },
         { IDC_SHOW_COMBO, &g_settings.showSamplerMode,
-            { "Default", "Yes", "No" } },
+            { "Default", "Yes", "No", nullptr } },
         { IDC_EXISTING_COMBO, &g_settings.existingMode,
-            { "Add", "Replace", "Replace on sampler FX slot" } },
+            { "Add", "Replace", "Replace on sampler FX slot", nullptr } },
         { IDC_MULTI_COMBO, &g_settings.multiFilesMode,
-            { "On one track", "On multiple tracks", "Always prompt" } },
+            { "On one track", "On multiple tracks", "Always prompt", nullptr } },
         { IDC_MULTISAMP_COMBO, &g_settings.multiSamplersMode,
-            { "Layers", "Chromatic", "Always prompt" } },
+            { "Layers", "Chromatic", "Always prompt", nullptr } },
+        { IDC_ARRANGE_COMBO, &g_settings.arrangeDropMode,
+            { "Disabled", "Insert sampler with modifier", "Insert item with modifier", nullptr } },
+        { IDC_TCP_COMBO, &g_settings.tcpDropMode,
+            { "Disabled", "Insert sampler with modifier", "Insert item with modifier", nullptr } },
         { 0, nullptr, {} }
     };
     return combos;
+}
+
+static const char* kModItems[] = { "Not set", "Shift", "Ctrl", "Alt", nullptr };
+
+struct ModCombo
+{
+    int id;
+    int* value;
+};
+
+static ModCombo* ModCombos()
+{
+    static ModCombo mods[] = {
+        { IDC_MOD_REPLACE_COMBO, &g_settings.modReplace },
+        { IDC_MOD_PLACE_COMBO, &g_settings.modPlacement },
+        { IDC_MOD_LAYERS_COMBO, &g_settings.modLayers },
+        { IDC_MOD_SURFACE_COMBO, &g_settings.modSurface },
+        { 0, nullptr }
+    };
+    return mods;
 }
 
 static void PopulateControls(HWND hwnd)
@@ -118,9 +160,18 @@ static void PopulateControls(HWND hwnd)
     for (ComboSetting* c = ComboSettings(); c->id; ++c)
     {
         HWND combo = GetDlgItem(hwnd, c->id);
-        for (const char* item : c->items)
-            SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)item);
+        for (int i = 0; c->items[i]; ++i)
+            SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)c->items[i]);
         SendMessage(combo, CB_SETCURSEL, *c->value, 0);
+    }
+    for (ModCombo* m = ModCombos(); m->id; ++m)
+    {
+        HWND combo = GetDlgItem(hwnd, m->id);
+        SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)"Not set");
+        SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)DTS_KEY_SHIFT);
+        SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)DTS_KEY_CTRL);
+        SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)DTS_KEY_ALT);
+        SendMessage(combo, CB_SETCURSEL, *m->value, 0);
     }
     CheckDlgButton(hwnd, IDC_DEBUG_CHECK, g_settings.debug ? BST_CHECKED : BST_UNCHECKED);
 
@@ -135,9 +186,38 @@ static void ApplyControls(HWND hwnd)
     for (ComboSetting* c = ComboSettings(); c->id; ++c)
     {
         int sel = (int)SendMessage(GetDlgItem(hwnd, c->id), CB_GETCURSEL, 0, 0);
-        if (sel >= 0 && sel <= 2)
+        int n = 0;
+        while (c->items[n]) ++n;
+        if (sel >= 0 && sel < n)
             *c->value = sel;
     }
+
+    // Read modifiers then resolve conflicts (last slot in list wins for a shared key)
+    int* slots[] = {
+        &g_settings.modReplace,
+        &g_settings.modPlacement,
+        &g_settings.modLayers,
+        &g_settings.modSurface,
+    };
+    const int kSlotCount = 4;
+    int raw[4] = {};
+    int ids[4] = {
+        IDC_MOD_REPLACE_COMBO, IDC_MOD_PLACE_COMBO, IDC_MOD_LAYERS_COMBO, IDC_MOD_SURFACE_COMBO
+    };
+    for (int i = 0; i < kSlotCount; ++i)
+    {
+        int sel = (int)SendMessage(GetDlgItem(hwnd, ids[i]), CB_GETCURSEL, 0, 0);
+        raw[i] = (sel >= 0 && sel <= ModKey_Alt) ? sel : ModKey_None;
+    }
+    for (int i = 0; i < kSlotCount; ++i)
+        *slots[i] = ModKey_None;
+    for (int i = 0; i < kSlotCount; ++i)
+        AssignModifierUnique(slots, kSlotCount, i, raw[i]);
+
+    // Refresh UI so cleared slots show Not set
+    for (int i = 0; i < kSlotCount; ++i)
+        SendMessage(GetDlgItem(hwnd, ids[i]), CB_SETCURSEL, *slots[i], 0);
+
     SaveSettings();
 }
 

@@ -2,7 +2,7 @@
  * Drop To Sampler
  * File drop on TCP/MCP -> insert sampler with sample loaded.
  *
- * main.cpp       entry point, action/menu, attaching drop targets to TCP/MCP
+ * main.cpp       entry point, action/menu, attaching drop targets to TCP/MCP/arrange
  * drop.cpp       what a drop does (modes, modifiers, prompts) + status line preview
  * sampler.cpp    RS5k / Cartridge FX: add, replace sample, chromatic mapping
  * tracks.cpp     track helpers
@@ -30,11 +30,21 @@ public:
     void OnDragEnter(int fileCount, int x, int y, const Modifiers& mods) override
     {
         m_fileCount = fileCount;
+        if (m_fileCount <= 0)
+        {
+            if (m_overlay) m_overlay->Hide();
+            return;
+        }
         OnDragOver(x, y, mods);
     }
 
     void OnDragOver(int x, int y, const Modifiers& mods) override
     {
+        if (m_fileCount <= 0)
+        {
+            if (m_overlay) m_overlay->Hide();
+            return;
+        }
         DropVisualKind kind = UpdateDropHelp(mods, x, y, m_fileCount);
         if (m_overlay) m_overlay->ShowAtCursor(kind);
     }
@@ -68,6 +78,7 @@ struct AttachedWindow
 };
 static AttachedWindow g_tcp;
 static std::vector<AttachedWindow> g_mcps;
+static AttachedWindow g_arrange;
 static int g_timerTicks = 0;
 
 // ---------------------------------------------------------------------------
@@ -100,41 +111,50 @@ static HWND FindTcpWindow()
     return nullptr;
 }
 
+// Starting HWND for arrange OLE discovery. Control 1000 is often REAPERTrackListWindow
+// (no OLE of its own); AttachPassthrough may walk parents to the real OLE owner.
+static HWND FindArrangeWindow()
+{
+    HWND main = GetMainHwnd ? GetMainHwnd() : nullptr;
+    if (!main) return nullptr;
+    HWND view = GetDlgItem(main, 1000);
+    return view ? view : main;
+}
+
 // The mixer can have several REAPERMCPDisplay windows (e.g. master and tracks, or a
 // master docked apart): take over drops on all of them. Drops reach only the window
 // they were registered on (Windows/macOS) or the deepest window under the cursor
 // (Linux), so attaching to one of them is not enough.
+//
+// IMPORTANT: never EnumWindows the whole desktop every timer tick, and never match
+// window titles like "Mixer" (breaks with localization and burns CPU when closed).
+
+#ifdef _WIN32
+static DWORD g_reaperPid = 0;
+#endif
+static int g_mcpEmptyBackoff = 0; // timer periods to skip full floating scan
+
 static bool IsMcpClass(HWND hwnd)
 {
     char cls[256] = {};
     GetClassName(hwnd, cls, sizeof(cls));
+    // Class names are not localized (REAPERMCPDisplay, etc.)
     return strstr(cls, "MCP") || strstr(cls, "mcp");
-}
-
-static bool IsMixerTitle(HWND hwnd)
-{
-    char title[256] = {};
-    GetWindowText(hwnd, title, sizeof(title));
-    return strstr(title, "Mixer") || strstr(title, "mixer");
 }
 
 struct McpSearch
 {
     std::vector<HWND> displays;
-    HWND mixerHost = nullptr; // fallback: docked / floating host titled "Mixer"
 };
 
 // Own recursion: EnumChildWindows is recursive on Windows but not everywhere in SWELL
 static void CollectMcpWindows(HWND hwnd, McpSearch& search)
 {
+    if (!hwnd) return;
     if (IsMcpClass(hwnd))
     {
         if (std::find(search.displays.begin(), search.displays.end(), hwnd) == search.displays.end())
             search.displays.push_back(hwnd);
-    }
-    else if (!search.mixerHost && IsMixerTitle(hwnd))
-    {
-        search.mixerHost = hwnd;
     }
     for (HWND child = GetWindow(hwnd, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT))
         CollectMcpWindows(child, search);
@@ -142,19 +162,37 @@ static void CollectMcpWindows(HWND hwnd, McpSearch& search)
 
 static BOOL CALLBACK CollectMcpTopLevel(HWND hwnd, LPARAM lParam)
 {
+#ifdef _WIN32
+    // Only windows belonging to this REAPER process (not every app on the desktop).
+    // SWELL's EnumWindows lists only this process's windows already.
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!g_reaperPid || pid != g_reaperPid)
+        return TRUE;
+#endif
     CollectMcpWindows(hwnd, *(McpSearch*)lParam);
     return TRUE;
 }
 
-static std::vector<HWND> FindMcpWindows()
+// scanFloating: also look for undocked mixer windows (same process only).
+static std::vector<HWND> FindMcpWindows(bool scanFloating)
 {
     McpSearch search;
     HWND main = GetMainHwnd ? GetMainHwnd() : nullptr;
     if (main)
+    {
+#ifdef _WIN32
+        if (!g_reaperPid)
+            GetWindowThreadProcessId(main, &g_reaperPid);
+#endif
         CollectMcpWindows(main, search);
-    EnumWindows(CollectMcpTopLevel, (LPARAM)&search); // floating mixer / dockers
-    if (search.displays.empty() && search.mixerHost)
-        search.displays.push_back(search.mixerHost);
+    }
+#ifdef _WIN32
+    if (scanFloating && g_reaperPid)
+#else
+    if (scanFloating)
+#endif
+        EnumWindows(CollectMcpTopLevel, (LPARAM)&search);
     return search.displays;
 }
 
@@ -169,46 +207,195 @@ static void LogAttach(const char* what, HWND hwnd, bool ok)
 }
 
 // (Re)attaches a drop target when the window appears or is recreated
+// TCP/MCP: no Alt -> sampler; Alt -> native via parent OLE (REAPER main).
+// Child HWND often has no OLE of its own; AttachClaim registers on the child and
+// forwards bypass drops to the parent drop target (same idea that made Alt work
+// on tracks before, including empty TCP area).
+static bool TcpMcpIntercept(const Modifiers& mods, int screenX, int screenY)
+{
+    (void)screenX;
+    (void)screenY;
+    return WantSamplerForMode(g_settings.tcpDropMode, IsModifierDown(mods, g_settings.modSurface));
+}
+
 static void UpdateTcpWindow()
 {
-    if (g_tcp.hwnd && IsWindow(g_tcp.hwnd))
+    if (g_settings.tcpDropMode == SurfaceDrop_Disabled)
+    {
+        if (g_tcp.hwnd || g_tcp.target)
+        {
+            g_tcp = AttachedWindow();
+            DebugLog("[Drop To Sampler] TCP drop target detached\n");
+        }
         return;
-    g_tcp.target.reset();
-    g_tcp.hwnd = FindTcpWindow();
+    }
+
+    if (g_tcp.target && g_tcp.hwnd && IsWindow(g_tcp.hwnd))
+        return;
+
+    if (!g_tcp.hwnd || !IsWindow(g_tcp.hwnd))
+    {
+        g_tcp.target.reset();
+        g_tcp.hwnd = FindTcpWindow();
+    }
     if (!g_tcp.hwnd) return;
-    g_tcp.target = DropTarget::Attach(g_tcp.hwnd, g_dragHandler);
-    LogAttach("TCP", g_tcp.hwnd, g_tcp.target != nullptr);
+
+    if (!g_tcp.target)
+    {
+        g_tcp.target = DropTarget::AttachClaim(g_tcp.hwnd, g_dragHandler, TcpMcpIntercept,
+            GetMainHwnd ? GetMainHwnd() : nullptr);
+        LogAttach("TCP", g_tcp.hwnd, g_tcp.target != nullptr);
+        if (!g_tcp.target)
+            DebugLog("[Drop To Sampler] TCP: parent OLE not found yet; will retry\n");
+    }
 }
+
 
 static void UpdateMcpWindows()
 {
-    std::vector<HWND> found = FindMcpWindows();
+    if (g_settings.tcpDropMode == SurfaceDrop_Disabled)
+    {
+        if (!g_mcps.empty())
+        {
+            g_mcps.clear();
+            DebugLog("[Drop To Sampler] MCP drop targets detached\n");
+        }
+        g_mcpEmptyBackoff = 0;
+        return;
+    }
+
+    // Only drop destroyed windows. Never detach a live floating MCP just because a
+    // "light" scan under the main window did not see it — that revoked OLE mid-drag
+    // (stuck cursor overlay + dead drop + repeated "registered" logs).
+    g_mcps.erase(std::remove_if(g_mcps.begin(), g_mcps.end(),
+        [](const AttachedWindow& w) { return !IsWindow(w.hwnd); }), g_mcps.end());
+
+    const bool haveLive = !g_mcps.empty();
+    if (!haveLive && g_mcpEmptyBackoff > 0)
+    {
+        --g_mcpEmptyBackoff;
+        return;
+    }
+
+    // Full floating scan when empty; while attached, only occasionally look for
+    // newly opened floating mixers (EnumWindows is filtered to this process).
+    static int s_floatingTick = 0;
+    const bool scanFloating = !haveLive || (++s_floatingTick >= 25);
+    if (scanFloating)
+        s_floatingTick = 0;
+
+    std::vector<HWND> found = FindMcpWindows(scanFloating);
     found.erase(std::remove(found.begin(), found.end(), g_tcp.hwnd), found.end());
 
-    // Detach windows that are gone or no longer match (e.g. the fallback host once
-    // the real MCP windows exist)
-    g_mcps.erase(std::remove_if(g_mcps.begin(), g_mcps.end(), [&](const AttachedWindow& w) {
-        return !IsWindow(w.hwnd) || std::find(found.begin(), found.end(), w.hwnd) == found.end();
-    }), g_mcps.end());
+    // Keep every still-valid attachment in the candidate set
+    for (const AttachedWindow& w : g_mcps)
+    {
+        if (IsWindow(w.hwnd)
+            && std::find(found.begin(), found.end(), w.hwnd) == found.end())
+            found.push_back(w.hwnd);
+    }
+
+    if (!haveLive && found.empty())
+    {
+        g_mcpEmptyBackoff = 15;
+        return;
+    }
+
+    g_mcpEmptyBackoff = 0;
+
+    HWND mainHwnd = GetMainHwnd ? GetMainHwnd() : nullptr;
 
     for (HWND hwnd : found)
     {
         bool attached = std::any_of(g_mcps.begin(), g_mcps.end(),
-            [&](const AttachedWindow& w) { return w.hwnd == hwnd; });
+            [&](const AttachedWindow& w) { return w.hwnd == hwnd && w.target; });
         if (attached) continue;
+
         AttachedWindow w;
         w.hwnd = hwnd;
-        w.target = DropTarget::Attach(hwnd, g_dragHandler);
-        LogAttach("MCP", hwnd, w.target != nullptr);
-        g_mcps.push_back(std::move(w)); // kept even on failure, so it is not retried every tick
+        w.target = DropTarget::AttachClaim(hwnd, g_dragHandler, TcpMcpIntercept, mainHwnd);
+        if (!w.target)
+            w.target = DropTarget::Attach(hwnd, g_dragHandler);
+
+        static std::vector<HWND> s_loggedFail;
+        if (w.target)
+        {
+            LogAttach("MCP", hwnd, true);
+            s_loggedFail.erase(std::remove(s_loggedFail.begin(), s_loggedFail.end(), hwnd), s_loggedFail.end());
+            g_mcps.push_back(std::move(w));
+        }
+        else if (std::find(s_loggedFail.begin(), s_loggedFail.end(), hwnd) == s_loggedFail.end())
+        {
+            LogAttach("MCP", hwnd, false);
+            s_loggedFail.push_back(hwnd);
+        }
     }
 }
+
+
+
+
+
+// Alt held -> sampler; otherwise leave the drop to REAPER (native item insert).
+static bool ArrangeIntercept(const Modifiers& mods, int screenX, int screenY)
+{
+    char info[256] = {};
+    if (GetThingFromPoint)
+        GetThingFromPoint(screenX, screenY, info, sizeof(info));
+
+    if (strncmp(info, "tcp", 3) == 0 || strncmp(info, "mcp", 3) == 0)
+        return false;
+    if (info[0] && strncmp(info, "arrange", 7) != 0)
+        return false;
+
+    return WantSamplerForMode(g_settings.arrangeDropMode, IsModifierDown(mods, g_settings.modSurface));
+}
+
+// When Enabled: OLE passthrough on arrange (Alt = our handler). Disabled: detach.
+static void UpdateArrangeWindow()
+{
+    if (g_settings.arrangeDropMode == SurfaceDrop_Disabled)
+    {
+        if (g_arrange.hwnd || g_arrange.target)
+        {
+            g_arrange = AttachedWindow();
+            DebugLog("[Drop To Sampler] Arrange drop target detached\n");
+        }
+        return;
+    }
+
+    if (g_arrange.hwnd && IsWindow(g_arrange.hwnd) && g_arrange.target)
+        return;
+
+    g_arrange.target.reset();
+    g_arrange.hwnd = FindArrangeWindow();
+    if (!g_arrange.hwnd) return;
+    // allowParentWalk=true: OLE for arrange is often on a parent of control 1000
+    g_arrange.target = DropTarget::AttachPassthrough(
+        g_arrange.hwnd, g_dragHandler, ArrangeIntercept, true);
+    // Avoid spamming the console every timer tick while OLE is not ready
+    static bool s_loggedArrangeFail = false;
+    if (g_arrange.target)
+    {
+        LogAttach("Arrange", g_arrange.hwnd, true);
+        s_loggedArrangeFail = false;
+    }
+    else if (!s_loggedArrangeFail)
+    {
+        LogAttach("Arrange", g_arrange.hwnd, false);
+        s_loggedArrangeFail = true;
+    }
+}
+
 
 static void OnTimer()
 {
     if (++g_timerTicks < 20) return;
     g_timerTicks = 0;
 
+    // Arrange first: captures REAPER's native OLE before we claim TCP/MCP
+    // (floating mixer must forward to that native, not to our arrange proxy).
+    UpdateArrangeWindow();
     UpdateTcpWindow();
     UpdateMcpWindows();
 }
@@ -252,6 +439,8 @@ static void Cleanup()
     UnregisterSettingsPage();
     g_tcp = AttachedWindow();
     g_mcps.clear();
+    g_arrange = AttachedWindow();
+    platform::ReleaseSavedReaperNative();
     if (g_dragHandler)
     {
         g_dragHandler->OnDragLeave();
